@@ -1,0 +1,1 @@
+In addition to usual diagrams flags such as  -w or -o, there is also --source flags which used to give the program a file to use when drawing a the graph (See TestList for the the format of the file)
