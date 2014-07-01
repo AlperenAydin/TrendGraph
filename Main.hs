@@ -15,6 +15,7 @@ import Diagrams.TrailLike
 import Options.Applicative
 
 import qualified Data.Map as Map
+import Data.List
 import Data.Time.Clock
 
 import Control.Monad.Identity

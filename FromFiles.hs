@@ -13,4 +13,3 @@ timeListFromString l = map timeI l'
         timeI l = let (fw, lst) = span (/=',') l
                       in (read (fw) :: UTCTime, read (tail lst) ::Double)
 
-

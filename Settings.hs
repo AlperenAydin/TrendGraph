@@ -3,6 +3,7 @@
 
 module Settings where
 
+import GHC.Read
 
 import Diagrams.Prelude
 import Diagrams.Backend.Cairo.CmdLine
@@ -22,8 +23,9 @@ type Setting = String
 --Definitions of the settings
 
 data Value = Col C
-               | Wdth Double
-               | Shape Di
-               | Intervalle [Double]
+                 | Wdth Double
+                 | Shape Di
+                 | Intervalle [Double]
+                 | Frequency Int
 
 type Choices = Map.Map Setting Value

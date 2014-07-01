@@ -11,6 +11,7 @@ import Diagrams.Backend.Cairo.CmdLine
 import Diagrams.TwoD.Shapes
 import Diagrams.TwoD.Text
 import Diagrams.TrailLike
+import Diagrams.Envelope
 
 import qualified Data.Map as Map
 import Data.Time.Clock
@@ -28,7 +29,11 @@ dot = circle 0.1 # fc black
 
 type UTime = UTCTime
 
-write = text.show
+write :: Show a => a -> Di
+write c = text(show c) # withEnvelope ( envelope::D R2)
+  where l = fromIntegral $ length(show c)
+        envelope = rect (l+1) 2
+  
 
 push :: Double -> Double -> Di -> Di
 push x y = translate $ r2(x,y)
@@ -105,11 +110,34 @@ yaxis = do m <- ask
              f' list = position $ map f list
              ls = [0.0 , 20.0 .. 100.0]
 
+xaxis :: [(UTime,Double)] -> Env Di
+xaxis t = do m <- ask
+             case Map.lookup "XAxisFrequency" m of
+               Just(Frequency f) -> return $ axis f
+               _-> return $ circle 01 # fc red <> axis 7
+  where lnth = length t
+        l = timeToPoint $ map projX t
+        projX (i,_) = (i,0)
+        t' n = indmod n t
+        l' n = indmod n l
+        xmark c = vrule 1 # pad 1.1
+                  <> write (utcToDate c) # pad 1.1 # push 0 (-2)
+                  <> circle 0.1 # fc blue
+        m n = map (\ (t,_) -> xmark t) (t' n)
+        axis n = position (zip (l' n) (m n))
 
+indmod :: Int -> [a] -> [a]
+indmod n list = foldl f [] [0 .. (length list)-1]
+  where f xs x = if x `mod` n == 0
+                    then xs++[list!!x]
+                         else xs
+
+                   
 --Combining the previous functions
 graph :: [(UTime,Double)] -> Env Di
 graph t = do marks <- markers l
              curve <- drawcurve l
              yax <- yaxis
-             return $ mconcat [marks, curve, yax]
+             xax <- xaxis t
+             return $ mconcat [marks, curve, yax,xax]
  where l = timeToPoint t
