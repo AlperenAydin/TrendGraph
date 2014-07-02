@@ -23,9 +23,10 @@ import Control.Monad.Reader
 
 --Convenience:
 
-type C=Colour Double
 
 dot = circle 0.1 # fc black
+
+cross = hrule 0.1 <> vrule 0.1
 
 type UTime = UTCTime
 
@@ -38,42 +39,6 @@ write c = text(show c) # withEnvelope ( envelope::D R2)
 push :: Double -> Double -> Di -> Di
 push x y = translate $ r2(x,y)
 
---Our monad with the error handling
---and reader characteristic:
-
-type Env a = ReaderT Choices (ErrorT String Identity) a
-
-runEnv :: Choices -> Env Di -> Either String Di
-runEnv choice a  = runIdentity ( runErrorT(runReaderT a choice))
-
--- We will use Env Di in our functions:
-
--- These take a list of points
-markers :: [P2] -> Env Di
-markers l = do m <- ask
-               case Map.lookup "markers" m of
-                 Nothing -> return $ position (zip l (repeat dot))
-                 Just (Shape s) -> return $ position (zip l (repeat s))
-                 _ -> throwError " Markers input not a shape"
-
-
-drawcurve :: [P2] -> Env Di
-drawcurve l = do m <- ask
-                 curve1 <- case Map.lookup "Curve Width" m of
-                   Just( Wdth w) -> return $ curve0 # lwO w
-                   _-> return $ curve0 
-                 case Map.lookup "Curve Colour" m of
-                   Nothing -> return $ curve1 # lc blue
-                   Just (Col c) -> return $ curve1 # lc c
-                   _ -> throwError "Curve Colour not a colour"
-  where curve0 = fromVertices l
-
--- Order:
-
-
-order :: [(UTime,Double)] -> [(UTime,Double)]
-order l = sortBy (\ (t1,i1) (t2,i2) -> compare t1 t2 ) l
-
 --Avarage difference in time in a list
 sumdiff :: [NominalDiffTime] -> NominalDiffTime
 sumdiff [] = 0
@@ -84,60 +49,112 @@ meandiff :: [UTCTime] -> NominalDiffTime
 meandiff t = sumdiff l / (genericLength l)
   where l = map (\ x -> diffUTCTime x (head t)) t
 
+        
+--Our monad with the error handling
+--and reader characteristic:
+
+type Env a = ReaderT Choices (ErrorT String Identity) a
+
+runEnv :: Choices -> Env Di -> Either String Di
+runEnv choice a  = runIdentity ( runErrorT(runReaderT a choice))
+
+-- We will use Env Di in our functions:
+
+--Lazy:
+
+standartStyles = cycle [ (dot,blue,0.1), (dot,red,0.2)]
+
+-- Order:
+
+
+order :: [(UTime,Double)] -> [(UTime,Double)]
+order l = sortBy (\ (t1,i1) (t2,i2) -> compare t1 t2 ) l
+
 --Transform time into points
 
 timeToDouble :: NominalDiffTime -> Double
 timeToDouble a = realToFrac a
 
-timeToPoint:: [(UTime,Double)] -> [P2]
-timeToPoint l = map p2 p
+timeToPoint:: NominalDiffTime -> [(UTime,Double)] -> [P2]
+timeToPoint unit l = map p2 p
   where l' = order l
         (fi,t) = head l'
         p = map (\ (time,i) -> (f time, i)) l'
-        mean = meandiff $ map (\(time,i) -> time) l'
-        f time = timeToDouble $ (diffUTCTime time fi )/mean
+        f time = timeToDouble $ (diffUTCTime time fi )/unit
 
---
+
+-- These gives me curves:
+curve :: [P2] -> (Di,C,Double) -> Di
+curve l (mark,lcolour,lwidth) = marks <> lines
+  where marks = position ( zip l (repeat mark))
+        lines = fromVertices l # lc lcolour # lwO lwidth
+
+drawcurves :: [[P2]] -> Env Di
+drawcurves l = do m <- ask
+                  style <- return $ case Map.lookup "CurveStyle" m of
+                    Just(Styles s) -> s ++standartStyles
+                    _-> standartStyles
+                  return $ mconcat $ zipWith curve l style
+
+--The Axis:
+
 yaxis :: Env Di
 yaxis = do m <- ask
-           case Map.lookup "Y-axis" m of
-             Just (Intervalle l) -> return $ yaxis l <> f' l
-             _ -> return $ yaxis ls <> f' ls
-       where yaxis l = fromVertices $ map p2 [(0,0),(0, last l)]
-             ymark n = hrule 1
-                       <> write n # push (-3) 0 # pad 1.6
-             f n = (p2(0,n),ymark n)
-             f' list = position $ map f list
-             ls = [0.0 , 20.0 .. 100.0]
+           l <- return $ findIntervalle m
+           return $ (axis l <> marks l)
+                                           
+  where findIntervalle m = case Map.lookup "Y-axis" m of
+          Just ( Intervalle l) -> l
+          _ -> [0.0 , 20.0  .. 100.0]
+        axis l = fromVertices $ map p2 [(0,0),(0, last l)]
+        ymark n = hrule 1
+                <> write n # push (-3) 0
+        f n = (p2(0,n),ymark n)
+        marks l = position $ map f l
 
-xaxis :: [(UTime,Double)] -> Env Di
-xaxis t = do m <- ask
-             case Map.lookup "XAxisFrequency" m of
-               Just(Frequency f) -> return $ axis f
-               _-> return $ circle 01 # fc red <> axis 7
-  where lnth = length t
-        l = timeToPoint $ map projX t
-        projX (i,_) = (i,0)
-        t' n = indmod n t
-        l' n = indmod n l
+
+xaxis :: [[UTime]] -> Env Di
+xaxis l = do m <- ask
+
+             t <- case Map.lookup "X-axis frequency" m of
+               Just(Fre f) -> return f
+               _ -> return d
+             u <- case Map.lookup "Unitary Time" m of
+               Just(Fre u) -> return u
+               _ -> return $ meandiff (head l)
+             return $ axis u t
+               
+
+  where start = minimum $ map head l
+        end = maximum $ map last l
+        intervalle timefre = takeWhile(<=end)
+                             $ iterate (addUTCTime timefre) start
+
         xmark c = vrule 1 # pad 1.1
                   <> write (utcToDate c) # pad 1.1 # push 0 (-2)
-                  <> circle 0.1 # fc blue
-        m n = map (\ (t,_) -> xmark t) (t' n)
-        axis n = position (zip (l' n) (m n))
 
-indmod :: Int -> [a] -> [a]
-indmod n list = foldl f [] [0 .. (length list)-1]
-  where f xs x = if x `mod` n == 0
-                    then xs++[list!!x]
-                         else xs
+        l' unit timefre = timeToPoint unit
+                         $ map (\ i -> (i,0)) (intervalle timefre)
 
-                   
---Combining the previous functions
-graph :: [(UTime,Double)] -> Env Di
-graph t = do marks <- markers l
-             curve <- drawcurve l
+        m timefre = map xmark (intervalle timefre)
+
+        axis u t = position $ zip (l' u t) (m t)
+
+
+-- The graph:
+
+graph :: [[(UTime,Double)]] -> Env Di
+graph t = do m <- ask
+             unit <- case Map.lookup "Unitary Time" m of
+                          Just (Fre u) -> return u
+                          _-> return $ meandiff (onlytime (head t))
+             curves <- drawcurves (l unit)
              yax <- yaxis
-             xax <- xaxis t
-             return $ mconcat [marks, curve, yax,xax]
- where l = timeToPoint t
+             xax <- xaxis t'
+             return $ mconcat [curves , yax, xax]
+
+  where l unit = map (timeToPoint unit) t
+        onlytime list = map (\ (t,_) -> t) list
+        t' = map onlytime t
+
+          

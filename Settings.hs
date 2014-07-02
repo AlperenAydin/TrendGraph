@@ -12,6 +12,8 @@ import Diagrams.TwoD.Text
 import Diagrams.TrailLike
 
 import qualified Data.Map as Map
+import Data.Time.Clock
+
 --Convenient Type Versions:
 
 type C = Colour Double
@@ -22,10 +24,8 @@ type Setting = String
 
 --Definitions of the settings
 
-data Value = Col C
-                 | Wdth Double
-                 | Shape Di
+data Value = Styles [(Di,C,Double)]
                  | Intervalle [Double]
-                 | Frequency Int
+                 | Fre NominalDiffTime
 
 type Choices = Map.Map Setting Value
