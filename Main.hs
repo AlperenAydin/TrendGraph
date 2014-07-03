@@ -45,7 +45,7 @@ setting = Map.empty
 graphfromFile src = do file <- openFile src ReadMode
                        times <- hGetContents file
                        timenum <- return $ timeListFromString times
-                       case runEnv setting ( graph timenum) of
+                       case runEnv setting ( graph [timenum]) of
                          (Right s) -> return $ (s <> circle 0.1 # fc red)
                          (Left st) -> return $ (circle 1 # fc red)
                          

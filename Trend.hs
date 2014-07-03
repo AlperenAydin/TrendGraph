@@ -118,7 +118,7 @@ xaxis l = do m <- ask
 
              t <- case Map.lookup "X-axis frequency" m of
                Just(Fre f) -> return f
-               _ -> return d
+               _ -> return $ 5*meandiff(head l)
              u <- case Map.lookup "Unitary Time" m of
                Just(Fre u) -> return u
                _ -> return $ meandiff (head l)
@@ -127,8 +127,9 @@ xaxis l = do m <- ask
 
   where start = minimum $ map head l
         end = maximum $ map last l
-        intervalle timefre = takeWhile(<=end)
-                             $ iterate (addUTCTime timefre) start
+        diff = diffUTCTime start end
+        
+        intervalle timefre = take 5  $ iterate (addUTCTime timefre) start 
 
         xmark c = vrule 1 # pad 1.1
                   <> write (utcToDate c) # pad 1.1 # push 0 (-2)
@@ -147,7 +148,7 @@ graph :: [[(UTime,Double)]] -> Env Di
 graph t = do m <- ask
              unit <- case Map.lookup "Unitary Time" m of
                           Just (Fre u) -> return u
-                          _-> return $ meandiff (onlytime (head t))
+                          _-> return $ meandiff(onlytime (head t))
              curves <- drawcurves (l unit)
              yax <- yaxis
              xax <- xaxis t'
